@@ -25,6 +25,15 @@ go build .
 ./rhsm-cli list systems --filter ocp
 ```
 
+## Show system details by UUID
+**Note:** There were some systems that had duplicate hostnames, by using the system UUID instead hostname, it ensures that it brings back the system you intended.
+
+```bash
+./rhsm-cli list systems --systemID <SYSTEM UUID>
+Hostname, UUID, Subscription Name, Sku, Pool ID
+ocp-app-01l.lab1.example.com, SYSTEM_UUID, Red Hat Developer Subscription for Individuals, RH00798, POOL_ID
+```
+
 ## List subscriptions under account
 ```bash
 ./rhsm-cli list subscriptions
@@ -47,3 +56,4 @@ Red Hat OpenShift Container Platform Standard (2 Cores or 4 vCPUs), 10391086, MC
 Red Hat OpenShift Container Platform Premium (2 Cores or 4 vCPUs), 10391089, MCT2735S, Active, 8a85f9997d484aeb017d6d5939591309, 132, 72
 Red Hat OpenShift Container Platform Premium (2 Cores or 4 vCPUs), 10391108, MCT2735S, Active, 8a85f9997d484aeb017d6d58dc6712e8, 71, 0
 ```
+
