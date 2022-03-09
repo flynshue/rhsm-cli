@@ -30,7 +30,7 @@ import (
 var subscriptionAddCmd = &cobra.Command{
 	Use:   "subscription",
 	Short: "Attach subscription pool to system",
-	Long: `Attach subscription pool to system
+	Long: `Attach subscription pool to system.
 
 Example:
 rhsm-cli add subscription --systemID <SYSTEM UUID> --poolID <POOL ID>
