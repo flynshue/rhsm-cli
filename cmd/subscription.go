@@ -29,31 +29,37 @@ import (
 // subscriptionAddCmd represents the subscription command
 var subscriptionAddCmd = &cobra.Command{
 	Use:   "subscription",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "Attach subscription pool to system",
+	Long: `Attach subscription pool to system
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+Example:
+rhsm-cli add subscription --systemID <SYSTEM UUID> --poolID <POOL ID>
+
+Note: This endpoint isn't working as described in the docs https://access.redhat.com/management/api/rhsm#/system/attachEntitlement.
+
+Please see https://access.redhat.com/management/systems to attach subscription until the feature is fixed.
+`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(systemID) == 0 || len(pool) == 0 {
+			fmt.Println(cmd.Long)
 			return fmt.Errorf("must supply system uuid and pool id")
 		}
-		return attachSub(systemID, pool)
+		if err := attachSub(systemID, pool); err != nil {
+			fmt.Println(cmd.Long)
+			return err
+		}
+		return nil
 	},
 }
 
 // subscriptionAddCmd represents the subscription command
 var subscriptionDelCmd = &cobra.Command{
 	Use:   "subscription",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "Remove subscription/entitlement ID from system",
+	Long: `Remove subscription/entitlement ID from system
+Example:
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+rhsm-cli remove subscription --systemID <SYSTEM UUID> --entitlementID <ENTITLEMENT ID>`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(systemID) == 0 || len(entitlementID) == 0 {
 			return fmt.Errorf("must supply system UUID and entitlement ID")
@@ -84,8 +90,6 @@ func removeSub(system, entitlement string) error {
 }
 
 func attachSub(system, pool string) error {
-	// fmt.Printf("attach %s to %s\n", system, pool)
-	// return nil
 	params := map[string]string{"uuid": system, "pool": pool}
 	return rhsmAPI().Call("attachSub", params, nil)
 }

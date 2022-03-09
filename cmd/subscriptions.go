@@ -28,13 +28,16 @@ import (
 // subscriptionsCmd represents the subscriptions command
 var subscriptionsCmd = &cobra.Command{
 	Use:   "subscriptions",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "List subscriptions under account",
+	Long: `List subscriptions under account
+Example:
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+# List all subscriptions
+rhsm-cli list subscriptions
+
+# List systems that are consuming subscription
+rhsm-cli list subscriptions --subscription <SUBSCRIPTION NUMBER>
+`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if subscription != "" {
 			return subSystemsList(subscription)
