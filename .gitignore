@@ -19,4 +19,5 @@ rhsm-cli
 # vendor/
 
 # Go workspace file
-go.work
+go.workdist/
+dist/
