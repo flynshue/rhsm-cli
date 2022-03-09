@@ -51,5 +51,5 @@ jobs:
           args: release --rm-dist
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ steps.tag_version.outputs.new_tag }}
+          # GORELEASER_CURRENT_TAG: ${{ steps.tag_version.outputs.new_tag }}
 
