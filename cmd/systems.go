@@ -89,7 +89,7 @@ type EntitlementsAttached struct {
 }
 
 type EntitlementValues struct {
-	PoolID           string `json:"id"`
+	EntitlementID    string `json:"id"`
 	SubscriptionName string `json:"subscriptionName"`
 	Sku              string `json:"sku"`
 }
@@ -143,11 +143,14 @@ func systemShowSuccess(resp *http.Response) error {
 	if err := json.Unmarshal(b, system); err != nil {
 		return err
 	}
-	fmt.Println("Hostname, UUID, Subscription Name, Sku, Pool ID")
-	fmt.Printf("%s, %s, %s, %s, %s\n", system.Body.Name, system.Body.ID,
-		system.Body.Entitlements.Value[0].SubscriptionName,
-		system.Body.Entitlements.Value[0].Sku,
-		system.Body.Entitlements.Value[0].PoolID)
+	fmt.Println("Hostname, UUID, Subscription Name, Sku, Entitlement ID")
+	var subscription, sku, entitlement string
+	if len(system.Body.Entitlements.Value) != 0 {
+		subscription = system.Body.Entitlements.Value[0].SubscriptionName
+		sku = system.Body.Entitlements.Value[0].Sku
+		entitlement = system.Body.Entitlements.Value[0].EntitlementID
+	}
+	fmt.Printf("%s, %s, %s, %s, %s\n", system.Body.Name, system.Body.ID, subscription, sku, entitlement)
 	return nil
 }
 

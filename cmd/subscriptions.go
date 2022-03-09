@@ -36,16 +36,25 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// fmt.Println("subscriptions called")
+		if subscription != "" {
+			return subSystemsList(subscription)
+		}
 		return subscriptionList()
 	},
 }
+
+var subscription string
 
 func subscriptionList() error {
 	return rhsmAPI().Call("subscriptionList", nil, nil)
 }
 
-type SubscriptionListSucess struct {
+func subSystemsList(subscription string) error {
+	params := map[string]string{"subscription": subscription}
+	return rhsmAPI().Call("subSystemsList", params, nil)
+}
+
+type SubscriptionListSuccess struct {
 	Body []SubscriptionBody
 }
 
@@ -63,23 +72,53 @@ type Pools struct {
 	Consumed int    `json:"consumed"`
 }
 
+type SubSystemResponse struct {
+	Body []SubSystemBody `json:"body"`
+}
+
+type SubSystemBody struct {
+	Name                 string `json:"systemName"`
+	UUID                 string `json:"uuid"`
+	EntitlementsConsumed int    `json:"totalEntitlementQuantity"`
+}
+
 func subscriptionListSuccess(resp *http.Response) error {
 	b, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
-	subscriptions := &SubscriptionListSucess{}
+	subscriptions := &SubscriptionListSuccess{}
 	if err := json.Unmarshal(b, subscriptions); err != nil {
 		return err
 	}
 	fmt.Println("Name, Subscription Number, SKU, Status, Pool ID, Quantity, Consumed")
 	for _, sub := range subscriptions.Body {
-		subscriptionMeta := fmt.Sprintf("%s, %s, %s, %s", sub.Name, sub.SubscriptionNumber, sub.Sku, sub.Status)
+		var (
+			poolID       string
+			poolQuantity int
+			poolConsumed int
+		)
 		if len(sub.Pools) != 0 {
-			poolMeta := fmt.Sprintf(" %s, %d, %d", sub.Pools[0].ID, sub.Pools[0].Quantity, sub.Pools[0].Consumed)
-			subscriptionMeta = subscriptionMeta + "," + poolMeta
+			poolID, poolQuantity, poolConsumed = sub.Pools[0].ID, sub.Pools[0].Quantity, sub.Pools[0].Consumed
 		}
-		fmt.Printf("%s\n", subscriptionMeta)
+		fmt.Printf("%s, %s, %s, %s, %s, %d, %d\n", sub.Name, sub.SubscriptionNumber,
+			sub.Sku, sub.Status, poolID, poolQuantity, poolConsumed)
+	}
+	return nil
+}
+
+func subSystemsSuccess(resp *http.Response) error {
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	systems := &SubSystemResponse{}
+	if err := json.Unmarshal(b, systems); err != nil {
+		return err
+	}
+	fmt.Println("System Name, UUID, Entitlements Consumed")
+	for _, system := range systems.Body {
+		fmt.Printf("%s, %s, %d\n", system.Name, system.UUID, system.EntitlementsConsumed)
 	}
 	return nil
 }
@@ -88,6 +127,12 @@ func subscriptionListResource() *rhsm.RestResource {
 	router := rhsm.NewRouter()
 	router.AddFunc(200, subscriptionListSuccess)
 	return rhsm.NewRestResource("GET", "/subscriptions", router)
+}
+
+func subSystemResource() *rhsm.RestResource {
+	router := rhsm.NewRouter()
+	router.AddFunc(200, subSystemsSuccess)
+	return rhsm.NewRestResource("GET", "/subscriptions/{{ .subscription }}/systems", router)
 }
 
 func init() {
@@ -102,4 +147,5 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// subscriptionsCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	subscriptionsCmd.Flags().StringVar(&subscription, "subscription", "", "subscription number")
 }
