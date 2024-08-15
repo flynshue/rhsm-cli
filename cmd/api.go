@@ -14,6 +14,7 @@ func rhsmAPI() *rhsm.API {
 		api.AddResource("systemsList", systemsListResource())
 		api.AddResource("subscriptionList", subscriptionListResource())
 		api.AddResource("systemShow", systemsShowResource())
+		api.AddResource("systemRemove", systemRemoveResource())
 		api.AddResource("subSystemsList", subSystemResource())
 		api.AddResource("attachSub", attachSubResource())
 		api.AddResource("removeSub", removeSubResource())
