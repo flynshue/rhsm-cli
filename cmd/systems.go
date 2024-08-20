@@ -5,7 +5,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+	http://www.apache.org/licenses/LICENSE-2.0
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,6 +21,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/flynshue/rhsm-cli/pkg/rhsm"
 	"github.com/spf13/cobra"
@@ -28,12 +30,23 @@ import (
 
 // flag vars
 var (
-	filter   string
-	systemID string
+	filter            string
+	systemID          string
+	showCount         bool
+	lastCheckinBefore string
+	lastCheckinTime   time.Time
+	assumeYes         bool
 )
 
-// systemsCmd represents the systems command
-var systemsCmd = &cobra.Command{
+type System struct {
+	ID   string
+	Name string
+}
+
+var systemsSlice = []System{}
+
+// systemsListCmd represents the systems command
+var systemsListCmd = &cobra.Command{
 	Use:   "systems",
 	Short: "list systems associated with redhat account",
 	Long: `
@@ -42,7 +55,13 @@ rhsm-cli list systems
 
 # List systems matching filter
 rhsm-cli list systems --filter ocp`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (err error) {
+		if lastCheckinBefore != "" {
+			lastCheckinTime, err = time.Parse("2006-01-02", lastCheckinBefore)
+			if err != nil {
+				fmt.Println("Error: ", err)
+			}
+		}
 		switch {
 		case len(filter) > 0:
 			return systemsFilter(filter)
@@ -50,6 +69,34 @@ rhsm-cli list systems --filter ocp`,
 			return systemShow(systemID)
 		default:
 			return systemsList()
+		}
+	},
+}
+
+// systemsListCmd represents the systems command
+var systemsRemoveCmd = &cobra.Command{
+	Use:   "systems",
+	Short: "remove systems associated with redhat account",
+	Long: `
+# Remove all systems associated with account
+rhsm-cli list systems
+
+# Remove systems matching filter
+rhsm-cli list systems --filter ocp`,
+	RunE: func(cmd *cobra.Command, args []string) (err error) {
+		if lastCheckinBefore != "" {
+			lastCheckinTime, err = time.Parse("2006-01-02", lastCheckinBefore)
+			if err != nil {
+				fmt.Println("Error: ", err)
+			}
+		}
+		switch {
+		case len(filter) > 0:
+			return systemsFilterRemove(filter)
+		case len(systemID) > 0:
+			return systemRemove(systemID, "")
+		default:
+			return systemsRemove()
 		}
 	},
 }
@@ -103,6 +150,22 @@ func systemsFilter(keyword string) error {
 	return paginationHelper("systemsFilter", params, nil)
 }
 
+func systemsFilterRemove(keyword string) error {
+	params := map[string]string{"filter": keyword, "offset": strconv.Itoa(offset)}
+	if err := rhsmAPI().Call("systemsFilter", params, nil); err != nil {
+		return err
+	}
+	if err := paginationHelper("systemsFilter", params, nil); err != nil {
+		return err
+	}
+	for _, system := range systemsSlice {
+		if err := systemRemove(system.ID, system.Name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func systemsList() error {
 	params := map[string]string{"offset": strconv.Itoa(offset)}
 	if err := rhsmAPI().Call("systemsList", params, nil); err != nil {
@@ -111,9 +174,40 @@ func systemsList() error {
 	return paginationHelper("systemsList", params, nil)
 }
 
+func systemsRemove() error {
+	params := map[string]string{"offset": strconv.Itoa(offset)}
+	if err := rhsmAPI().Call("systemsList", params, nil); err != nil {
+		return err
+	}
+	if err := paginationHelper("systemsList", params, nil); err != nil {
+		return err
+	}
+
+	if !assumeYes {
+		fmt.Println("\nAre you sure you want to remove these systems? (yes/[no])")
+		var response string
+		fmt.Scanln(&response)
+		if !strings.HasPrefix(strings.ToLower(response), "y") {
+			return nil
+		}
+	}
+	for _, system := range systemsSlice {
+		if err := systemRemove(system.ID, system.Name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func systemShow(uuid string) error {
 	params := map[string]string{"uuid": uuid}
 	return rhsmAPI().Call("systemShow", params, nil)
+}
+
+func systemRemove(uuid, name string) error {
+	fmt.Printf("Removing system: %s, %s\n", name, uuid)
+	params := map[string]string{"uuid": uuid}
+	return rhsmAPI().Call("systemRemove", params, nil)
 }
 
 func systemsSuccess(resp *http.Response) error {
@@ -127,9 +221,18 @@ func systemsSuccess(resp *http.Response) error {
 	}
 	count = systems.Count
 	for _, system := range systems.Body {
-		fmt.Printf("%s, %s, %d, %s, %s\n",
-			system.Hostname, system.Type,
-			system.EntitlementCount, system.UUID, system.LastCheckin)
+		var lastCheckin time.Time
+		if lastCheckinBefore != "" {
+			lastCheckin, _ = time.Parse(time.RFC3339, system.LastCheckin)
+		}
+		if lastCheckinBefore == "" || (!lastCheckin.IsZero() && lastCheckin.Before(lastCheckinTime)) {
+			systemsSlice = append(systemsSlice, System{ID: system.UUID, Name: system.Hostname})
+			if !showCount {
+				fmt.Printf("%s, %s, %d, %s, %s\n",
+					system.Hostname, system.Type,
+					system.EntitlementCount, system.UUID, system.LastCheckin)
+			}
+		}
 	}
 	return nil
 }
@@ -143,6 +246,7 @@ func systemShowSuccess(resp *http.Response) error {
 	if err := json.Unmarshal(b, system); err != nil {
 		return err
 	}
+	systemsSlice = []System{{ID: system.Body.ID, Name: system.Body.Name}}
 	fmt.Println("Hostname, UUID, Subscription Name, Sku, Entitlement ID")
 	var subscription, sku, entitlement string
 	if len(system.Body.Entitlements.Value) != 0 {
@@ -151,6 +255,11 @@ func systemShowSuccess(resp *http.Response) error {
 		entitlement = system.Body.Entitlements.Value[0].EntitlementID
 	}
 	fmt.Printf("%s, %s, %s, %s, %s\n", system.Body.Name, system.Body.ID, subscription, sku, entitlement)
+	return nil
+}
+
+func systemRemoveSuccess(resp *http.Response) error {
+	fmt.Println("System removed")
 	return nil
 }
 
@@ -172,6 +281,12 @@ func systemsShowResource() *rhsm.RestResource {
 	return rhsm.NewRestResource("GET", "/systems/{{ .uuid }}?include=entitlements", router)
 }
 
+func systemRemoveResource() *rhsm.RestResource {
+	router := rhsm.NewRouter()
+	router.AddFunc(204, systemRemoveSuccess)
+	return rhsm.NewRestResource("DELETE", "/systems/{{ .uuid }}", router)
+}
+
 func paginationHelper(resource string, params map[string]string, body interface{}) error {
 	for count == 100 {
 		offset += 100
@@ -180,11 +295,15 @@ func paginationHelper(resource string, params map[string]string, body interface{
 			return err
 		}
 	}
+	if showCount {
+		fmt.Println(len(systemsSlice))
+	}
 	return nil
 }
 
 func init() {
-	listCmd.AddCommand(systemsCmd)
+	listCmd.AddCommand(systemsListCmd)
+	removeCmd.AddCommand(systemsRemoveCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -195,6 +314,13 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// systemsCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-	systemsCmd.Flags().StringVar(&filter, "filter", "", "filter systems by system name")
-	systemsCmd.Flags().StringVar(&systemID, "systemID", "", "get system by system uuid and its entitlements")
+	systemsListCmd.Flags().StringVar(&filter, "filter", "", "filter systems by system name")
+	systemsListCmd.Flags().StringVar(&systemID, "systemID", "", "get system by system uuid and its entitlements")
+	systemsListCmd.Flags().BoolVar(&showCount, "count", false, "show total number of systems, optionally filtered")
+	systemsListCmd.Flags().StringVar(&lastCheckinBefore, "lastCheckinBefore", "", "filter systems by last checkin date")
+
+	systemsRemoveCmd.Flags().BoolVar(&assumeYes, "yes", false, "assume yes to all prompts")
+	systemsRemoveCmd.Flags().StringVar(&filter, "filter", "", "filter systems to remove by system name")
+	systemsRemoveCmd.Flags().StringVar(&lastCheckinBefore, "lastCheckinBefore", "", "filter systems to remove by last checkin date")
+	systemsRemoveCmd.Flags().StringVar(&systemID, "systemID", "", "remove system by uuid")
 }
