@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"golang.org/x/oauth2"
 	oauthClient "golang.org/x/oauth2/clientcredentials"
@@ -45,6 +47,24 @@ func (c *Client) ProcessRequest(baseurl string, resource *RestResource, params m
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		return err
+	}
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfter := resp.Header.Get("X-Ratelimit-Delay")
+		if retryAfter == "" {
+			return fmt.Errorf("Too Many Requests response received, but X-Ratelimit-Delay header not found")
+		}
+
+		delay, err := time.ParseDuration(retryAfter + "s")
+		if err != nil {
+			return fmt.Errorf("parsing X-Ratelimit-Delay (%s): %w", resp.Header.Get("X-Ratelimit-Delay"), err)
+		}
+
+		time.Sleep(delay)
+
+		resp, err = c.Client.Do(req)
+		if err != nil {
+			return err
+		}
 	}
 	return resource.Router.Call(resp)
 }
